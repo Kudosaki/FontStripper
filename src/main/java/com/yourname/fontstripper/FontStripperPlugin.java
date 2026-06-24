@@ -15,13 +15,7 @@ public class FontStripperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
-
-        // Register the open/close inventory listener
-        getServer().getPluginManager().registerEvents(new InventoryStateHandler(), this);
-
-        // Register the packet interceptor
         ItemPacketEventsInterceptor.register(this);
-
         getLogger().info("[FontStripper] Successfully initialized.");
     }
 
