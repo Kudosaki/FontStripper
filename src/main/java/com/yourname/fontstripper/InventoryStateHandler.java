@@ -4,6 +4,7 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -28,30 +29,32 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         Player player = (Player) event.getPlayer();
         openInventories.add(player.getUniqueId());
+        plugin.getLogger().info("[Debug] Inventory opened for: " + player.getName() + ". Adding to openInventories.");
 
-        // 5-tick delay: Ensures the client UI thread has finished the 
-        // initial packet handling before we override the cache.
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline()) return;
+            plugin.getLogger().info("[Debug] Running Clear-then-Set refresh for: " + player.getName());
 
-            // 1. Manual "SetSlot" refresh (Hotbar 36-44)
-            // We force-send the 'Pretty' item to override the cached slot state.
             for (int slot = 36; slot <= 44; slot++) {
                 ItemStack item = player.getInventory().getItem(slot);
                 if (item != null) {
-                    WrapperPlayServerSetSlot packet = new WrapperPlayServerSetSlot(
-                        0, // Window ID 0 (Player Inventory)
-                        0, // State ID
-                        slot, 
+                    // 1. CLEAR: Air
+                    WrapperPlayServerSetSlot clearPacket = new WrapperPlayServerSetSlot(
+                        0, 0, slot, 
+                        SpigotConversionUtil.fromBukkitItemStack(new ItemStack(Material.AIR))
+                    );
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, clearPacket);
+
+                    // 2. SET: Item
+                    WrapperPlayServerSetSlot setPacket = new WrapperPlayServerSetSlot(
+                        0, 0, slot, 
                         SpigotConversionUtil.fromBukkitItemStack(item)
                     );
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, setPacket);
+                    
+                    plugin.getLogger().info("[Debug] Refreshed slot " + slot + " for " + player.getName());
                 }
             }
-
-            // 2. Final "Flush": Forces the client to re-render the entire GUI view
-            player.updateInventory();
-            
         }, 5L); 
     }
 
@@ -59,8 +62,7 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
-
-        // Refresh on close to immediately re-apply the filter
+        plugin.getLogger().info("[Debug] Inventory closed for: " + player.getName() + ". Removing from openInventories.");
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 }
