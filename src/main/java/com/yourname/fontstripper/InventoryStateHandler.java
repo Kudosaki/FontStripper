@@ -40,6 +40,7 @@ public class InventoryStateHandler implements Listener {
                 if (item != null) {
                     WrapperPlayServerSetSlot packet = new WrapperPlayServerSetSlot(
                         0, // Window ID 0 is the player inventory
+                        0,
                         slot, 
                         SpigotConversionUtil.fromBukkitItemStack(item)
                     );
