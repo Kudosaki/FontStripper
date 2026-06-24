@@ -14,6 +14,7 @@ public class FontStripperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
+        // Registering listener with 'this' so it can access the scheduler
         getServer().getPluginManager().registerEvents(new InventoryStateHandler(this), this);
         ItemPacketEventsInterceptor.register(this);
         getLogger().info("FontStripper enabled!");
