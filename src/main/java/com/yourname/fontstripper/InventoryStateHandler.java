@@ -25,10 +25,15 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
         
-        // Add player to the open set
+        // --- DEBUG LOGGING ---
+        String invType = event.getInventory().getType().name();
+        Bukkit.getLogger().info("[FontStripper Debug] " + player.getName() + " opened inventory of type: " + invType);
+        // ---------------------
+
+        // Track that the player has an active GUI screen open
         openInventories.add(player.getUniqueId());
         
-        // Force the server to resend items so the font reappears in the GUI
+        // Force the server to re-sync item values to the client 1 tick later.
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 
@@ -36,10 +41,13 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
         
-        // Remove player from the open set
+        // --- DEBUG LOGGING ---
+        Bukkit.getLogger().info("[FontStripper Debug] " + player.getName() + " closed inventory.");
+        // ---------------------
+
         openInventories.remove(player.getUniqueId());
         
-        // Force the server to resend items so the font is stripped in the hotbar
+        // Force a re-sync now that the GUI is shut to clean out the hotbar cache immediately
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 }
