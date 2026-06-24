@@ -9,6 +9,7 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -29,9 +30,12 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         if (!(event.getPlayer() instanceof Player)) return;
         Player player = (Player) event.getPlayer();
 
-        // If inventory is open, we do nothing; let the original packets through
-        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
+        // CHECK: If inventory is open, we do nothing (pass the "pretty" version through)
+        boolean isOpen = InventoryStateHandler.openInventories.contains(player.getUniqueId());
+        
+        if (isOpen) return;
 
+        // If inventory is NOT open, we apply the filter
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
             if (wrapper.getSlot() < 36 || wrapper.getSlot() > 44) return;
