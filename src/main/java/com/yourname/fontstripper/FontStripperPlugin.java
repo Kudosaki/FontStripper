@@ -5,6 +5,7 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class FontStripperPlugin extends JavaPlugin {
+
     @Override
     public void onLoad() {
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
@@ -14,11 +15,13 @@ public class FontStripperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
-        // Register the close-event listener
+
+        // Register the open/close inventory listener
         getServer().getPluginManager().registerEvents(new InventoryStateHandler(), this);
+
         // Register the packet interceptor
         ItemPacketEventsInterceptor.register(this);
-        
+
         getLogger().info("[FontStripper] Successfully initialized.");
     }
 
