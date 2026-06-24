@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.item.ItemStack;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityEquipment;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
@@ -21,13 +22,10 @@ import java.util.regex.Pattern;
 
 public class ItemPacketEventsInterceptor implements PacketListener {
 
-    // Hotbar slots in the full player inventory array (slots 36-44)
     private static final int HOTBAR_START = 36;
-    private static final int HOTBAR_END = 44;
+    private static final int OFFHAND_SLOT = 45; // Covers 36-44 (Hotbar) and 45 (Offhand)
 
-    // PUA Unicode range — where custom font glyphs live
     private static final Pattern PUA_PATTERN = Pattern.compile("[\uE000-\uF8FF]");
-
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
 
     public static void register(JavaPlugin plugin) {
@@ -41,89 +39,103 @@ public class ItemPacketEventsInterceptor implements PacketListener {
     public void onPacketSend(PacketSendEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
 
-        // Handle WINDOW_ITEMS — full inventory sync (fires on login, respawn, inventory open/close)
         if (event.getPacketType() == PacketType.Play.Server.WINDOW_ITEMS) {
             handleWindowItems(event, player);
-            return;
-        }
-
-        // Handle SET_SLOT — single slot update (offhand, picked up items, etc.)
-        if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
+        } else if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             handleSetSlot(event, player);
+        } else if (event.getPacketType() == PacketType.Play.Server.ENTITY_EQUIPMENT) {
+            handleEntityEquipment(event, player);
         }
     }
 
     private void handleWindowItems(PacketSendEvent event, Player player) {
         WrapperPlayServerWindowItems wrapper = new WrapperPlayServerWindowItems(event);
-
-        // Only player inventory (windowId 0)
         if (wrapper.getWindowId() != 0) return;
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
 
-        boolean inventoryOpen = InventoryStateHandler.openInventories.contains(player.getUniqueId());
         List<ItemStack> items = wrapper.getItems();
         List<ItemStack> modified = new ArrayList<>(items);
         boolean changed = false;
 
-        for (int i = HOTBAR_START; i <= HOTBAR_END && i < modified.size(); i++) {
-            ItemStack peItem = modified.get(i);
-            if (peItem == null || peItem.isEmpty()) continue;
-
-            org.bukkit.inventory.ItemStack bukkit = SpigotConversionUtil.toBukkitItemStack(peItem);
-            if (bukkit == null || bukkit.getType().isAir()) continue;
-
-            var meta = bukkit.getItemMeta();
-            if (meta == null || !meta.hasDisplayName()) continue;
-
-            Component nameComponent = meta.displayName();
-            if (nameComponent == null) continue;
-
-            String plainName = PLAIN.serialize(nameComponent);
-
-            if (!PUA_PATTERN.matcher(plainName).find()) continue;
-
-            if (inventoryOpen) {
-                // Inventory is open — restore font (send as-is, no stripping)
-                // Nothing to do, item already has font
-            } else {
-                // Hotbar visible — strip the font
-                org.bukkit.inventory.ItemStack stripped = stripFont(bukkit, nameComponent);
-                modified.set(i, SpigotConversionUtil.fromBukkitItemStack(stripped));
+        // Strip only the hotbar and offhand slots when the inventory is closed
+        for (int i = HOTBAR_START; i <= OFFHAND_SLOT && i < modified.size(); i++) {
+            ItemStack original = modified.get(i);
+            ItemStack processed = processItem(original);
+            
+            if (original != processed) {
+                modified.set(i, processed);
                 changed = true;
             }
         }
 
-        if (changed) {
-            wrapper.setItems(modified);
-        }
+        if (changed) wrapper.setItems(modified);
     }
 
     private void handleSetSlot(PacketSendEvent event, Player player) {
         WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
 
-        if (wrapper.getWindowId() != 0) return;
+        int windowId = wrapper.getWindowId();
         int slot = wrapper.getSlot();
-        if (slot < HOTBAR_START || slot > HOTBAR_END) return;
 
-        boolean inventoryOpen = InventoryStateHandler.openInventories.contains(player.getUniqueId());
-        if (inventoryOpen) return;
+        // Target normal hotbar/offhand updates (0) OR floating cursor items (-1)
+        if (windowId == 0 && (slot < HOTBAR_START || slot > OFFHAND_SLOT)) return;
+        if (windowId != 0 && windowId != -1) return;
 
-        ItemStack peItem = wrapper.getItem();
-        if (peItem == null || peItem.isEmpty()) return;
+        ItemStack original = wrapper.getItem();
+        ItemStack processed = processItem(original);
+
+        if (original != processed) {
+            wrapper.setItem(processed);
+        }
+    }
+
+    private void handleEntityEquipment(PacketSendEvent event, Player player) {
+        WrapperPlayServerEntityEquipment wrapper = new WrapperPlayServerEntityEquipment(event);
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
+
+        // Ensure we are only modifying what the player sees in their OWN hand
+        if (wrapper.getEntityId() != player.getEntityId()) return;
+
+        boolean changed = false;
+        List<WrapperPlayServerEntityEquipment.Equipment> equipmentList = wrapper.getEquipment();
+        
+        for (WrapperPlayServerEntityEquipment.Equipment eq : equipmentList) {
+            ItemStack original = eq.getItem();
+            ItemStack processed = processItem(original);
+            
+            if (original != processed) {
+                eq.setItem(processed);
+                changed = true;
+            }
+        }
+
+        if (changed) wrapper.setEquipment(equipmentList);
+    }
+
+    // --- Helper Methods ---
+
+    /**
+     * Checks if the item has the custom font. If it does, strips it and returns the new item.
+     * If not, returns the exact original item untouched.
+     */
+    private ItemStack processItem(ItemStack peItem) {
+        if (peItem == null || peItem.isEmpty()) return peItem;
 
         org.bukkit.inventory.ItemStack bukkit = SpigotConversionUtil.toBukkitItemStack(peItem);
-        if (bukkit == null || bukkit.getType().isAir()) return;
+        if (bukkit == null || bukkit.getType().isAir()) return peItem;
 
         var meta = bukkit.getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) return;
+        if (meta == null || !meta.hasDisplayName()) return peItem;
 
         Component nameComponent = meta.displayName();
-        if (nameComponent == null) return;
+        if (nameComponent == null) return peItem;
 
         String plainName = PLAIN.serialize(nameComponent);
-        if (!PUA_PATTERN.matcher(plainName).find()) return;
+        if (!PUA_PATTERN.matcher(plainName).find()) return peItem;
 
         org.bukkit.inventory.ItemStack stripped = stripFont(bukkit, nameComponent);
-        wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
+        return SpigotConversionUtil.fromBukkitItemStack(stripped);
     }
 
     private static org.bukkit.inventory.ItemStack stripFont(
@@ -141,13 +153,11 @@ public class ItemPacketEventsInterceptor implements PacketListener {
     private static Component removePUARecursive(Component component) {
         Component result = component;
 
-        // Strip PUA characters from text content
         if (component instanceof TextComponent tc) {
             String cleaned = PUA_PATTERN.matcher(tc.content()).replaceAll("");
             result = tc.content(cleaned);
         }
 
-        // Recurse into children
         List<Component> children = component.children();
         if (!children.isEmpty()) {
             result = result.children(
