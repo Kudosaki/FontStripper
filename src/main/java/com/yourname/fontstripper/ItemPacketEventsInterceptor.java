@@ -6,7 +6,6 @@ import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.item.ItemStack;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityEquipment;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
@@ -43,8 +42,6 @@ public class ItemPacketEventsInterceptor implements PacketListener {
             handleWindowItems(event, player);
         } else if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             handleSetSlot(event, player);
-        } else if (event.getPacketType() == PacketType.Play.Server.ENTITY_EQUIPMENT) {
-            handleEntityEquipment(event, player);
         }
     }
 
@@ -88,29 +85,6 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         if (original != processed) {
             wrapper.setItem(processed);
         }
-    }
-
-    private void handleEntityEquipment(PacketSendEvent event, Player player) {
-        WrapperPlayServerEntityEquipment wrapper = new WrapperPlayServerEntityEquipment(event);
-        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
-
-        // Ensure we are only modifying what the player sees in their OWN hand
-        if (wrapper.getEntityId() != player.getEntityId()) return;
-
-        boolean changed = false;
-        List<WrapperPlayServerEntityEquipment.Equipment> equipmentList = wrapper.getEquipment();
-        
-        for (WrapperPlayServerEntityEquipment.Equipment eq : equipmentList) {
-            ItemStack original = eq.getItem();
-            ItemStack processed = processItem(original);
-            
-            if (original != processed) {
-                eq.setItem(processed);
-                changed = true;
-            }
-        }
-
-        if (changed) wrapper.setEquipment(equipmentList);
     }
 
     // --- Helper Methods ---
