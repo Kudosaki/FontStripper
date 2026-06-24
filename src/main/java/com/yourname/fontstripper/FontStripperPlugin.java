@@ -14,9 +14,11 @@ public class FontStripperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
-        getServer().getPluginManager().registerEvents(new InventoryStateHandler(this), this);
+        
+        // This is the ONLY thing required to start filtering.
         ItemPacketEventsInterceptor.register(this);
-        getLogger().info("[FontStripper] Debug-Enabled version loaded.");
+        
+        getLogger().info("[FontStripper] Diagnostic mode enabled. Every SET_SLOT packet will be logged.");
     }
 
     @Override
