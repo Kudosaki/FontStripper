@@ -12,6 +12,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+
 import java.util.regex.Pattern;
 
 public class ItemPacketEventsInterceptor implements PacketListener {
@@ -19,30 +20,38 @@ public class ItemPacketEventsInterceptor implements PacketListener {
 
     public static void register(JavaPlugin plugin) {
         PacketEvents.getAPI().getEventManager().registerListener(new ItemPacketEventsInterceptor(), PacketListenerPriority.HIGHEST);
-        plugin.getLogger().info("[FontStripper] Interceptor registered successfully.");
     }
 
     @Override
     public void onPacketSend(PacketSendEvent event) {
         if (!(event.getPlayer() instanceof Player)) return;
+        Player player = (Player) event.getPlayer();
 
-        // DIAGNOSTIC: Log every SET_SLOT packet so we can see what slot ID it is
+        // 1. DETECTION: If we receive WINDOW_ITEMS, the inventory is OPEN.
+        if (event.getPacketType() == PacketType.Play.Server.WINDOW_ITEMS) {
+            InventoryStateHandler.openInventories.add(player.getUniqueId());
+            return;
+        }
+
+        // 2. FILTERING: If the inventory is open, do nothing (restore original items)
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) {
+            return;
+        }
+
+        // 3. STRIPPING: If closed, strip the font
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
             
-            // Log the slot ID! This will tell us if your hotbar is actually 36-44
-            Bukkit.getLogger().info("[FontStripper Diagnostic] Received SET_SLOT packet for slot: " + wrapper.getSlot());
-
-            ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
-            
-            if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
-                Component name = item.getItemMeta().displayName();
-                if (name != null && name.toString().matches(".*[\uE000-\uF8FF].*")) {
-                    Bukkit.getLogger().info("[FontStripper Diagnostic] Found item with custom font! Stripping...");
-                    
-                    // Force strip
-                    ItemStack stripped = strip(item);
-                    if (stripped != null) {
+            // Only target hotbar slots (36-44)
+            if (wrapper.getSlot() >= 36 && wrapper.getSlot() <= 44) {
+                ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
+                
+                if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                    Component name = item.getItemMeta().displayName();
+                    if (name != null && name.toString().matches(".*[\uE000-\uF8FF].*")) {
+                        // Debugging: confirm stripping
+                        // System.out.println("[Debug] Stripping item in slot: " + wrapper.getSlot());
+                        ItemStack stripped = strip(item);
                         wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
                     }
                 }
