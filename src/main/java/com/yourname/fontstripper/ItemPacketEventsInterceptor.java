@@ -9,6 +9,7 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,8 +26,11 @@ public class ItemPacketEventsInterceptor implements PacketListener {
 
     @Override
     public void onPacketSend(PacketSendEvent event) {
-        // If inventory is open, we do nothing; let raw data pass through
-        if (InventoryStateHandler.openInventories.contains(event.getPlayer().getUniqueId())) return;
+        if (!(event.getPlayer() instanceof Player)) return;
+        Player player = (Player) event.getPlayer();
+
+        // If inventory is open, do nothing (keep font intact)
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
 
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
@@ -44,9 +48,15 @@ public class ItemPacketEventsInterceptor implements PacketListener {
             for (int i = 0; i < items.size(); i++) {
                 if (i >= 36 && i <= 44) {
                     ItemStack stripped = strip(SpigotConversionUtil.toBukkitItemStack(items.get(i)));
-                    if (stripped != null) { processed.add(SpigotConversionUtil.fromBukkitItemStack(stripped)); changed = true; }
-                    else processed.add(items.get(i));
-                } else processed.add(items.get(i));
+                    if (stripped != null) { 
+                        processed.add(SpigotConversionUtil.fromBukkitItemStack(stripped)); 
+                        changed = true; 
+                    } else { 
+                        processed.add(items.get(i)); 
+                    }
+                } else { 
+                    processed.add(items.get(i)); 
+                }
             }
             if (changed) wrapper.setItems(processed);
         }
