@@ -13,7 +13,9 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
-    compileOnly("com.github.retrooper.packetevents:spigot:2.4.0") 
+    
+    // THE FIX: The colon is moved, and a hyphen is used!
+    compileOnly("com.github.retrooper:packetevents-spigot:2.4.0") 
 }
 
 java {
