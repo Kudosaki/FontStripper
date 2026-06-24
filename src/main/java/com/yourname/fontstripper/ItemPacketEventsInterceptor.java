@@ -5,15 +5,15 @@ import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -30,18 +30,21 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         if (!(event.getPlayer() instanceof Player)) return;
         Player player = (Player) event.getPlayer();
 
-        // CHECK: If inventory is open, we do nothing (pass the "pretty" version through)
-        boolean isOpen = InventoryStateHandler.openInventories.contains(player.getUniqueId());
-        
-        if (isOpen) return;
+        // Debug: See if the packet is being let through
+        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) {
+            // We do NOT log here to prevent console spam
+            return; 
+        }
 
-        // If inventory is NOT open, we apply the filter
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
             if (wrapper.getSlot() < 36 || wrapper.getSlot() > 44) return;
             
             ItemStack stripped = strip(SpigotConversionUtil.toBukkitItemStack(wrapper.getItem()));
-            if (stripped != null) wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
+            if (stripped != null) {
+                // plugin.getLogger().info("[Debug] Stripping slot " + wrapper.getSlot()); // Uncomment if you need to see stripping
+                wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
+            }
             
         } else if (event.getPacketType() == PacketType.Play.Server.WINDOW_ITEMS) {
             WrapperPlayServerWindowItems wrapper = new WrapperPlayServerWindowItems(event);
