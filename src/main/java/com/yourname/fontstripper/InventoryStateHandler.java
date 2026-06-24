@@ -24,11 +24,16 @@ public class InventoryStateHandler implements Listener {
         Player player = (Player) event.getPlayer();
         openInventories.add(player.getUniqueId());
 
-        // Force a refresh. The 3-tick delay ensures the inventory 
-        // is fully initialized before we force the resend.
+        // We use a 3-tick delay to ensure the inventory packet has been processed 
+        // by the client's internal UI thread before we force a refresh.
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline()) {
+                // This triggers a full re-sync of the inventory data
                 player.updateInventory();
+                
+                // FORCE REFRESH: By accessing the inventory explicitly, 
+                // we tell the client to re-render the slots.
+                player.openInventory(player.getOpenInventory().getTopInventory());
             }
         }, 3L);
     }
@@ -38,7 +43,7 @@ public class InventoryStateHandler implements Listener {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
 
-        // Force a refresh to instantly re-apply the filter when closed
+        // Standard refresh on close to re-apply the filter immediately
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline()) {
                 player.updateInventory();
