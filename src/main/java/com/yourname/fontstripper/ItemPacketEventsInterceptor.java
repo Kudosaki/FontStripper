@@ -8,6 +8,7 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -16,6 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.regex.Pattern;
 
 public class ItemPacketEventsInterceptor implements PacketListener {
+    // Regex for Private Use Area characters
     private static final Pattern UNICODE_FONT_PATTERN = Pattern.compile("[\uE000-\uF8FF]");
 
     public static void register(JavaPlugin plugin) {
@@ -27,34 +29,38 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         if (!(event.getPlayer() instanceof Player)) return;
         Player player = (Player) event.getPlayer();
 
-        // 1. DETECTION: If we receive WINDOW_ITEMS, the inventory is OPEN.
-        if (event.getPacketType() == PacketType.Play.Server.WINDOW_ITEMS) {
-            InventoryStateHandler.openInventories.add(player.getUniqueId());
-            return;
-        }
-
-        // 2. FILTERING: If the inventory is open, do nothing (restore original items)
-        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) {
-            return;
-        }
-
-        // 3. STRIPPING: If closed, strip the font
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
             
-            // Only target hotbar slots (36-44)
-            if (wrapper.getSlot() >= 36 && wrapper.getSlot() <= 44) {
-                ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
+            // Log every SET_SLOT packet
+            Bukkit.getLogger().info("[FilterDebug] SET_SLOT packet received for Slot: " + wrapper.getSlot());
+
+            ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
+            
+            if (item == null || item.getType().isAir()) return;
+
+            if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                Component nameComponent = item.getItemMeta().displayName();
+                // Use plain text for reliable regex matching
+                String name = PlainTextComponentSerializer.plainText().serialize(nameComponent);
                 
-                if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
-                    Component name = item.getItemMeta().displayName();
-                    if (name != null && name.toString().matches(".*[\uE000-\uF8FF].*")) {
-                        // Debugging: confirm stripping
-                        // System.out.println("[Debug] Stripping item in slot: " + wrapper.getSlot());
+                Bukkit.getLogger().info("[FilterDebug] Checking item: " + item.getType() + " | Name: " + name);
+
+                if (UNICODE_FONT_PATTERN.matcher(name).find()) {
+                    Bukkit.getLogger().info("[FilterDebug] MATCH FOUND! Checking inventory state...");
+
+                    if (!InventoryStateHandler.openInventories.contains(player.getUniqueId())) {
+                        Bukkit.getLogger().info("[FilterDebug] Inventory CLOSED - STRIPPING FONT.");
                         ItemStack stripped = strip(item);
                         wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
+                    } else {
+                        Bukkit.getLogger().info("[FilterDebug] Inventory OPEN - Skipping strip.");
                     }
+                } else {
+                    Bukkit.getLogger().info("[FilterDebug] No font pattern detected in name.");
                 }
+            } else {
+                Bukkit.getLogger().info("[FilterDebug] No meta/display name on item.");
             }
         }
     }
@@ -62,7 +68,10 @@ public class ItemPacketEventsInterceptor implements PacketListener {
     private static ItemStack strip(ItemStack item) {
         ItemStack clone = item.clone();
         var meta = clone.getItemMeta();
-        meta.displayName(meta.displayName().replaceText(b -> b.match(UNICODE_FONT_PATTERN).replacement("")));
+        // Get name, strip pattern, set back
+        String name = PlainTextComponentSerializer.plainText().serialize(meta.displayName());
+        String cleanName = name.replaceAll("[\uE000-\uF8FF]", "");
+        meta.displayName(net.kyori.adventure.text.Component.text(cleanName));
         clone.setItemMeta(meta);
         return clone;
     }
