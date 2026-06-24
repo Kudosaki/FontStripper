@@ -18,7 +18,9 @@ public class InventoryStateHandler implements Listener {
 
     @EventHandler
     public void onInventoryOpen(InventoryOpenEvent event) {
+        Player player = (Player) event.getPlayer();
         openInventories.add(event.getPlayer().getUniqueId());
+        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 
     @EventHandler
