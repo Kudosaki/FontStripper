@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 public class ItemPacketEventsInterceptor implements PacketListener {
 
     private static final int HOTBAR_START = 36;
-    private static final int OFFHAND_SLOT = 45; // Covers 36-44 (Hotbar) and 45 (Offhand)
+    private static final int OFFHAND_SLOT = 45; 
 
     private static final Pattern PUA_PATTERN = Pattern.compile("[\uE000-\uF8FF]");
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
@@ -47,6 +47,8 @@ public class ItemPacketEventsInterceptor implements PacketListener {
 
     private void handleWindowItems(PacketSendEvent event, Player player) {
         WrapperPlayServerWindowItems wrapper = new WrapperPlayServerWindowItems(event);
+        
+        // Window ID 0 is the closed default background inventory view
         if (wrapper.getWindowId() != 0) return;
         if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
 
@@ -54,7 +56,6 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         List<ItemStack> modified = new ArrayList<>(items);
         boolean changed = false;
 
-        // Strip only the hotbar and offhand slots when the inventory is closed
         for (int i = HOTBAR_START; i <= OFFHAND_SLOT && i < modified.size(); i++) {
             ItemStack original = modified.get(i);
             ItemStack processed = processItem(original);
@@ -75,7 +76,7 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         int windowId = wrapper.getWindowId();
         int slot = wrapper.getSlot();
 
-        // Target normal hotbar/offhand updates (0) OR floating cursor items (-1)
+        // Strip only if it is a hotbar update while running around closed
         if (windowId == 0 && (slot < HOTBAR_START || slot > OFFHAND_SLOT)) return;
         if (windowId != 0 && windowId != -1) return;
 
@@ -87,12 +88,6 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         }
     }
 
-    // --- Helper Methods ---
-
-    /**
-     * Checks if the item has the custom font. If it does, strips it and returns the new item.
-     * If not, returns the exact original item untouched.
-     */
     private ItemStack processItem(ItemStack peItem) {
         if (peItem == null || peItem.isEmpty()) return peItem;
 
