@@ -7,11 +7,11 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
-
 import java.util.regex.Pattern;
 
 public class ItemPacketEventsInterceptor implements PacketListener {
@@ -19,35 +19,28 @@ public class ItemPacketEventsInterceptor implements PacketListener {
 
     public static void register(JavaPlugin plugin) {
         PacketEvents.getAPI().getEventManager().registerListener(new ItemPacketEventsInterceptor(), PacketListenerPriority.HIGHEST);
+        plugin.getLogger().info("[FontStripper] Interceptor registered successfully.");
     }
 
     @Override
     public void onPacketSend(PacketSendEvent event) {
         if (!(event.getPlayer() instanceof Player)) return;
-        Player player = (Player) event.getPlayer();
 
-        // Check if inventory is open
-        boolean isOpen = InventoryStateHandler.openInventories.contains(player.getUniqueId());
-
+        // DIAGNOSTIC: Log every SET_SLOT packet so we can see what slot ID it is
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
             WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
-            if (wrapper.getSlot() < 36 || wrapper.getSlot() > 44) return;
+            
+            // Log the slot ID! This will tell us if your hotbar is actually 36-44
+            Bukkit.getLogger().info("[FontStripper Diagnostic] Received SET_SLOT packet for slot: " + wrapper.getSlot());
 
             ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
-            boolean hasFont = item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName() 
-                             && item.getItemMeta().displayName().toString().matches(".*[\uE000-\uF8FF].*");
-
-            if (isOpen) {
-                // RESTORE LOGIC: If it's open, ensure we are sending the original item.
-                // We force the packet to contain the original (unstripped) item.
-                if (hasFont) {
-                    Bukkit.getLogger().info("[FontStripper Debug] RESTORING original item for " + player.getName() + " in slot " + wrapper.getSlot());
-                }
-                // We don't strip. We send the original packet through (which is the original item).
-            } else {
-                // FILTER LOGIC: Inventory is closed, strip it.
-                if (hasFont) {
-                    Bukkit.getLogger().info("[FontStripper Debug] FILTERING (Stripping) item for " + player.getName() + " in slot " + wrapper.getSlot());
+            
+            if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                Component name = item.getItemMeta().displayName();
+                if (name != null && name.toString().matches(".*[\uE000-\uF8FF].*")) {
+                    Bukkit.getLogger().info("[FontStripper Diagnostic] Found item with custom font! Stripping...");
+                    
+                    // Force strip
                     ItemStack stripped = strip(item);
                     if (stripped != null) {
                         wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
@@ -58,7 +51,6 @@ public class ItemPacketEventsInterceptor implements PacketListener {
     }
 
     private static ItemStack strip(ItemStack item) {
-        if (item == null || item.isEmpty() || !item.hasItemMeta()) return null;
         ItemStack clone = item.clone();
         var meta = clone.getItemMeta();
         meta.displayName(meta.displayName().replaceText(b -> b.match(UNICODE_FONT_PATTERN).replacement("")));
