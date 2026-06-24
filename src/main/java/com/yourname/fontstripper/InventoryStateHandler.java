@@ -28,6 +28,6 @@ public class InventoryStateHandler implements Listener {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
         // Force refresh to strip font immediately after closing
-        player.updateInventory();
+        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 }
