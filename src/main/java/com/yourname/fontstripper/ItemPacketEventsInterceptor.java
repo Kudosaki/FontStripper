@@ -18,6 +18,11 @@ import java.util.List;
 
 public class ItemPacketEventsInterceptor implements PacketListener {
 
+    // In the player inventory container (window ID 0):
+    // Slots 36-44 are the hotbar slots 0-8
+    private static final int HOTBAR_START = 36;
+    private static final int HOTBAR_END = 44;
+
     public static void register(JavaPlugin plugin) {
         PacketEvents.getAPI().getEventManager().registerListener(
             new ItemPacketEventsInterceptor(),
@@ -28,51 +33,44 @@ public class ItemPacketEventsInterceptor implements PacketListener {
     @Override
     public void onPacketSend(PacketSendEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
-
         if (event.getPacketType() != PacketType.Play.Server.SET_SLOT) return;
 
         WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
-        Bukkit.getLogger().info("[FontStripper] SET_SLOT for slot: " + wrapper.getSlot());
+
+        int windowId = wrapper.getWindowId();
+        int slot = wrapper.getSlot();
+
+        Bukkit.getLogger().info("[FontStripper] SET_SLOT windowId=" + windowId + " slot=" + slot);
+
+        // Only strip for player inventory (windowId 0), hotbar slots 36-44
+        // Any other container (chest, furnace, etc.) = inventory is open, keep font
+        if (windowId != 0 || slot < HOTBAR_START || slot > HOTBAR_END) {
+            Bukkit.getLogger().info("[FontStripper] Not a hotbar slot — keeping font.");
+            return;
+        }
 
         ItemStack item = SpigotConversionUtil.toBukkitItemStack(wrapper.getItem());
         if (item == null || item.getType().isAir()) return;
 
         var meta = item.getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) {
-            Bukkit.getLogger().info("[FontStripper] No meta/display name.");
-            return;
-        }
+        if (meta == null || !meta.hasDisplayName()) return;
 
         Component nameComponent = meta.displayName();
         if (nameComponent == null) return;
 
-        // Serialize to JSON to detect Adventure font styling
         String nameJson = GsonComponentSerializer.gson().serialize(nameComponent);
         Bukkit.getLogger().info("[FontStripper] Name JSON: " + nameJson);
 
-        boolean hasCustomFont = nameJson.contains("\"font\"");
-
-        if (!hasCustomFont) {
+        if (!nameJson.contains("\"font\"")) {
             Bukkit.getLogger().info("[FontStripper] No custom font detected.");
             return;
         }
 
-        Bukkit.getLogger().info("[FontStripper] Custom font found. Checking inventory state...");
-
-        if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) {
-            // Inventory is open — send the item as-is with font intact
-            Bukkit.getLogger().info("[FontStripper] Inventory OPEN — keeping font.");
-        } else {
-            // Hotbar / closed inventory — strip the font
-            Bukkit.getLogger().info("[FontStripper] Inventory CLOSED — stripping font.");
-            ItemStack stripped = stripFont(item);
-            wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
-        }
+        Bukkit.getLogger().info("[FontStripper] Hotbar slot with custom font — stripping.");
+        ItemStack stripped = stripFont(item);
+        wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(stripped));
     }
 
-    /**
-     * Clones the item and recursively removes all font styling from its display name.
-     */
     private static ItemStack stripFont(ItemStack item) {
         ItemStack clone = item.clone();
         var meta = clone.getItemMeta();
@@ -81,23 +79,16 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         Component original = meta.displayName();
         if (original == null) return clone;
 
-        Component stripped = removeFontRecursive(original);
-        meta.displayName(stripped);
+        meta.displayName(removeFontRecursive(original));
         clone.setItemMeta(meta);
         return clone;
     }
 
-    /**
-     * Recursively walks the Component tree and nulls out any font key,
-     * preserving all other styling (color, bold, italic, etc.) and text content.
-     */
     private static Component removeFontRecursive(Component component) {
-        // Remove only the font from this component's style, keep everything else
         Component result = component.style(
             component.style().toBuilder().font(null).build()
         );
 
-        // Recurse into children
         List<Component> children = component.children();
         if (!children.isEmpty()) {
             List<Component> strippedChildren = children.stream()
