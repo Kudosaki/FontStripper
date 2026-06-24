@@ -29,7 +29,7 @@ public class ItemPacketEventsInterceptor implements PacketListener {
         if (!(event.getPlayer() instanceof Player)) return;
         Player player = (Player) event.getPlayer();
 
-        // If inventory is open, do nothing (keep font intact)
+        // If inventory is open, we do nothing; let the original packets through
         if (InventoryStateHandler.openInventories.contains(player.getUniqueId())) return;
 
         if (event.getPacketType() == PacketType.Play.Server.SET_SLOT) {
