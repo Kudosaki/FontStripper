@@ -1,5 +1,6 @@
 name: FontStripper
 version: 1.0
 main: com.yourname.fontstripper.FontStripperPlugin
+load: STARTUP
 api-version: '1.21'
 depend: [packetevents]
