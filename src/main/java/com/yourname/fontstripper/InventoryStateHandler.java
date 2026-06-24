@@ -22,6 +22,7 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player) {
             openInventories.add(event.getPlayer().getUniqueId());
+            plugin.getLogger().info("[FontStripper Debug] Inventory Open detected for: " + event.getPlayer().getName());
         }
     }
 
@@ -29,6 +30,7 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player) {
             openInventories.remove(event.getPlayer().getUniqueId());
+            plugin.getLogger().info("[FontStripper Debug] Inventory Close detected for: " + event.getPlayer().getName());
         }
     }
 }
