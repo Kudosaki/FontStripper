@@ -1,41 +1,38 @@
-package com.yourname.fontstripper;
+@Override
+public void onPacketSend(PacketSendEvent event) {
+    PacketType packetType = event.getPacketType();
 
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-
-public class InventoryStateHandler implements Listener {
-
-    public static final Set<UUID> openInventories = new HashSet<>();
-    private final JavaPlugin plugin;
-
-    public InventoryStateHandler(JavaPlugin plugin) {
-        this.plugin = plugin;
+    // 1. If it's a WINDOW_ITEMS packet (the full inventory sync), 
+    // we NEVER strip. This ensures when you open your inventory, 
+    // you see the beautiful custom icons exactly as you designed them.
+    if (packetType == PacketType.Play.Server.WINDOW_ITEMS) {
+        return; 
     }
 
-    @EventHandler
-    public void onInventoryOpen(InventoryOpenEvent event) {
-        Player player = (Player) event.getPlayer();
-        openInventories.add(player.getUniqueId());
-        
-        // Force an item packet refresh 1 tick later so the GUI renders the unstripped items
-        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
-    }
+    // 2. If it's a SET_SLOT packet, we only process it if it's the 
+    // Hotbar slots (36-44) AND we are NOT looking at a container GUI.
+    if (packetType == PacketType.Play.Server.SET_SLOT) {
+        WrapperPlayServerSetSlot wrapper = new WrapperPlayServerSetSlot(event);
+        int slot = wrapper.getSlot();
 
-    @EventHandler
-    public void onInventoryClose(InventoryCloseEvent event) {
-        Player player = (Player) event.getPlayer();
-        openInventories.remove(player.getUniqueId());
-        
-        // Force a packet refresh so the hotbar switches back to stripped mode
-        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
+        // Only touch hotbar (36-44)
+        if (slot < 36 || slot > 44) return;
+
+        // NEW LOGIC: If the player IS looking at an inventory, 
+        // we skip the strip entirely so the tooltip remains pristine.
+        if (InventoryStateHandler.openInventories.contains(event.getPlayer().getUniqueId())) {
+            return;
+        }
+
+        // Only strip if they are NOT looking at an inventory
+        com.github.retrooper.packetevents.protocol.item.ItemStack peItem = wrapper.getItem();
+        if (peItem == null || peItem.isEmpty()) return;
+
+        ItemStack bukkitItem = SpigotConversionUtil.toBukkitItemStack(peItem);
+        ItemStack strippedItem = stripCustomFontIfPresent(bukkitItem);
+
+        if (strippedItem != null) {
+            wrapper.setItem(SpigotConversionUtil.fromBukkitItemStack(strippedItem));
+        }
     }
 }
