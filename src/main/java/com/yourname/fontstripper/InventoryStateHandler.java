@@ -29,25 +29,30 @@ public class InventoryStateHandler implements Listener {
         Player player = (Player) event.getPlayer();
         openInventories.add(player.getUniqueId());
 
-        // We delay the force-update to ensure the client window is fully initialized
+        // 5-tick delay: Ensures the client UI thread has finished the 
+        // initial packet handling before we override the cache.
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline()) return;
 
-            // Manual "SetSlot" refresh for the hotbar slots (36-44)
-            // This forces the client to redraw these slots, bypassing the cache.
+            // 1. Manual "SetSlot" refresh (Hotbar 36-44)
+            // We force-send the 'Pretty' item to override the cached slot state.
             for (int slot = 36; slot <= 44; slot++) {
                 ItemStack item = player.getInventory().getItem(slot);
                 if (item != null) {
                     WrapperPlayServerSetSlot packet = new WrapperPlayServerSetSlot(
-                        0, // Window ID 0 is the player inventory
-                        0,
+                        0, // Window ID 0 (Player Inventory)
+                        0, // State ID
                         slot, 
                         SpigotConversionUtil.fromBukkitItemStack(item)
                     );
                     PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
                 }
             }
-        }, 3L);
+
+            // 2. Final "Flush": Forces the client to re-render the entire GUI view
+            player.updateInventory();
+            
+        }, 5L); 
     }
 
     @EventHandler
@@ -55,7 +60,7 @@ public class InventoryStateHandler implements Listener {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
 
-        // When closing, a standard update is usually sufficient to re-apply the filter
+        // Refresh on close to immediately re-apply the filter
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 }
