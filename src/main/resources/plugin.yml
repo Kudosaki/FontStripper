@@ -2,4 +2,4 @@ name: FontStripper
 version: 1.0
 main: com.yourname.fontstripper.FontStripperPlugin
 api-version: '1.21'
-depend: [PacketEvents]
+depend: [packetevents]
