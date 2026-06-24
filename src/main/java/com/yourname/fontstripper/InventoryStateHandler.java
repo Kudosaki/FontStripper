@@ -1,5 +1,6 @@
 package com.yourname.fontstripper;
 
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -14,12 +15,15 @@ public class InventoryStateHandler implements Listener {
     public static final Set<UUID> openInventories = new HashSet<>();
     private final JavaPlugin plugin;
 
-    public InventoryStateHandler(JavaPlugin plugin) { this.plugin = plugin; }
+    public InventoryStateHandler(JavaPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     @EventHandler
     public void onInventoryOpen(InventoryOpenEvent event) {
         Player player = (Player) event.getPlayer();
-        openInventories.add(event.getPlayer().getUniqueId());
+        openInventories.add(player.getUniqueId());
+        // Force refresh to ensure client receives "Pretty" packet
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 
@@ -27,7 +31,7 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
-        // Force refresh to strip font immediately after closing
+        // Force refresh to switch back to "Stripped" packet
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
 }
