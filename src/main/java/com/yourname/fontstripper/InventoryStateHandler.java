@@ -23,15 +23,26 @@ public class InventoryStateHandler implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         Player player = (Player) event.getPlayer();
         openInventories.add(player.getUniqueId());
-        // Force refresh to ensure client receives "Pretty" packet
-        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
+
+        // Force a refresh. The 3-tick delay ensures the inventory 
+        // is fully initialized before we force the resend.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                player.updateInventory();
+            }
+        }, 3L);
     }
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         Player player = (Player) event.getPlayer();
         openInventories.remove(player.getUniqueId());
-        // Force refresh to switch back to "Stripped" packet
-        Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
+
+        // Force a refresh to instantly re-apply the filter when closed
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                player.updateInventory();
+            }
+        }, 1L);
     }
 }
